@@ -16,6 +16,7 @@
 package it.sephiroth.android.library.hlistviewanimations.swinginadapters;
 
 import android.annotation.SuppressLint;
+import android.os.SystemClock;
 import android.util.SparseArray;
 import android.view.View;
 import android.view.ViewGroup;
@@ -51,6 +52,16 @@ public abstract class AnimationAdapter extends BaseAdapterDecorator {
 	private long mAnimationDelayMillis = DEFAULTANIMATIONDELAYMILLIS;
 	private long mAnimationDurationMillis = DEFAULTANIMATIONDURATIONMILLIS;
 
+	/**
+	 * If the AbsListView is an instance of GridView, this boolean indicates whether the GridView is possibly measuring the view.
+	 */
+	private boolean mGridViewPossiblyMeasuring;
+
+	/**
+	 * The position of the item that the GridView is possibly measuring.
+	 */
+	private int mGridViewMeasuringPosition;
+
 	public AnimationAdapter(final BaseAdapter baseAdapter) {
 		super(baseAdapter);
 		mAnimators = new SparseArray<Animator>();
@@ -58,6 +69,8 @@ public abstract class AnimationAdapter extends BaseAdapterDecorator {
 		mAnimationStartMillis = - 1;
 		mFirstAnimatedPosition = - 1;
 		mLastAnimatedPosition = - 1;
+		mGridViewPossiblyMeasuring = true;
+		mGridViewMeasuringPosition = - 1;
 
 		if (baseAdapter instanceof AnimationAdapter) {
 			((AnimationAdapter) baseAdapter).setHasParentAnimationAdapter(true);
@@ -75,6 +88,8 @@ public abstract class AnimationAdapter extends BaseAdapterDecorator {
 		mLastAnimatedPosition = - 1;
 		mAnimationStartMillis = - 1;
 		mShouldAnimate = true;
+		mGridViewPossiblyMeasuring = true;
+		mGridViewMeasuringPosition = - 1;
 
 		if (getDecoratedBaseAdapter() instanceof AnimationAdapter) {
 			((AnimationAdapter) getDecoratedBaseAdapter()).reset();
@@ -149,29 +164,36 @@ public abstract class AnimationAdapter extends BaseAdapterDecorator {
 	}
 
 	private void animateViewIfNecessary(final int position, final View view, final ViewGroup parent) {
-		boolean isMeasuringGridViewItem = parent.getHeight() == 0;
-		// boolean isMeasuringGridViewItem = false;
+		/* GridView measures the first View which is returned by getView(int, View, ViewGroup),
+		but does not use that View. On KitKat, it does this actually multiple times. */
+		mGridViewPossiblyMeasuring =
+			mGridViewPossiblyMeasuring && (mGridViewMeasuringPosition == - 1 || mGridViewMeasuringPosition == position);
 
-		if (position > mLastAnimatedPosition && mShouldAnimate && ! isMeasuringGridViewItem) {
+		if (mGridViewPossiblyMeasuring) {
+			mGridViewMeasuringPosition = position;
+			mLastAnimatedPosition = - 1;
+		}
+
+		if (position > mLastAnimatedPosition && mShouldAnimate) {
 			if (mFirstAnimatedPosition == - 1) {
 				mFirstAnimatedPosition = position;
 			}
 
-			animateView(parent, view);
+			animateView(position, view, parent);
 			mLastAnimatedPosition = position;
 		}
 	}
 
-	private void animateView(final ViewGroup parent, final View view) {
+	private void animateView(final int position, final View view, final ViewGroup parent) {
 		if (mAnimationStartMillis == - 1) {
-			mAnimationStartMillis = System.currentTimeMillis();
+			mAnimationStartMillis = SystemClock.uptimeMillis();
 		}
 
 		ViewHelper.setAlpha(view, 0);
 
 		Animator[] childAnimators;
-		if (mDecoratedBaseAdapter instanceof AnimationAdapter) {
-			childAnimators = ((AnimationAdapter) mDecoratedBaseAdapter).getAnimators(parent, view);
+		if (getDecoratedBaseAdapter() instanceof AnimationAdapter) {
+			childAnimators = ((AnimationAdapter) getDecoratedBaseAdapter()).getAnimators(parent, view);
 		}
 		else {
 			childAnimators = new Animator[0];
@@ -181,14 +203,18 @@ public abstract class AnimationAdapter extends BaseAdapterDecorator {
 
 		AnimatorSet set = new AnimatorSet();
 		set.playTogether(concatAnimators(childAnimators, animators, alphaAnimator));
-		set.setStartDelay(calculateAnimationDelay());
-		set.setDuration(getAnimationDurationMillis());
+		set.setStartDelay(calculateAnimationDelay(position));
+		set.setDuration(mAnimationDurationMillis);
 		set.start();
 
 		mAnimators.put(view.hashCode(), set);
 	}
 
-	private Animator[] concatAnimators(final Animator[] childAnimators, final Animator[] animators, final Animator alphaAnimator) {
+	/**
+	 * Merges given Animators into one array.
+	 */
+	private static Animator[] concatAnimators(
+		final Animator[] childAnimators, final Animator[] animators, final Animator alphaAnimator) {
 		Animator[] allAnimators = new Animator[childAnimators.length + animators.length + 1];
 		int i;
 
@@ -205,22 +231,25 @@ public abstract class AnimationAdapter extends BaseAdapterDecorator {
 		return allAnimators;
 	}
 
+	/**
+	 * Returns the delay in milliseconds after which animation for View with position mLastAnimatedPosition + 1 should start.
+	 */
 	@SuppressLint ("NewApi")
-	private long calculateAnimationDelay() {
+	private long calculateAnimationDelay(final int position) {
 		long delay;
 
 		int lastVisiblePosition = getAbsHListView().getLastVisiblePosition();
 		int firstVisiblePosition = getAbsHListView().getFirstVisiblePosition();
 
 		int numberOfItemsOnScreen = lastVisiblePosition - firstVisiblePosition;
-		int numberOfAnimatedItems = mLastAnimatedPosition - mFirstAnimatedPosition;
+		int numberOfAnimatedItems = position - 1 - mFirstAnimatedPosition;
 
 		if (numberOfItemsOnScreen + 1 < numberOfAnimatedItems) {
-			delay = getAnimationDelayMillis();
+			delay = mAnimationDelayMillis;
 		}
 		else {
-			long delaySinceStart = (mLastAnimatedPosition - mFirstAnimatedPosition + 1) * getAnimationDelayMillis();
-			delay = mAnimationStartMillis + getInitialDelayMillis() + delaySinceStart - System.currentTimeMillis();
+			long delaySinceStart = (position - mFirstAnimatedPosition) * mAnimationDelayMillis;
+			delay = Math.max(0, mAnimationStartMillis + mInitialDelayMillis + delaySinceStart - SystemClock.uptimeMillis());
 		}
 		return delay;
 	}

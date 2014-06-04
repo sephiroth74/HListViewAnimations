@@ -106,6 +106,8 @@ public class SimpleHListActivity extends Activity implements OnClickListener, On
 
 		AnimationAdapter adapter = new MyAnimationAdapter(mAdapter);
 		adapter.setAbsHListView(listView);
+		adapter.setAnimationDelayMillis(150);
+		adapter.setInitialDelayMillis(100);
 		listView.setAdapter(adapter);
 
 		//listView.setAdapter( mAdapter );
@@ -262,8 +264,8 @@ public class SimpleHListActivity extends Activity implements OnClickListener, On
 
 		@Override
 		protected Animator getAnimator(final ViewGroup parent, final View view) {
-			Animator animator = ObjectAnimator.ofFloat(view, "translationX", -300, 0);
-			animator.setDuration(200);
+			Animator animator = ObjectAnimator.ofFloat(view, "translationY", 500, 0);
+			animator.setDuration(900);
 			animator.setInterpolator(new OvershootInterpolator(2f));
 			return animator;
 		}
