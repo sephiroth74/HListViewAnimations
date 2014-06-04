@@ -1,0 +1,38 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:0.10.+'
+    }
+}
+
+def isReleaseBuild() {
+    return version.contains("SNAPSHOT") == false
+}
+
+allprojects {
+    version = VERSION_NAME
+    group = GROUP
+
+
+    repositories {
+        mavenCentral()
+        mavenLocal()
+
+        maven {
+            name 'sonatype-snapshots'
+            url uri("https://oss.sonatype.org/content/repositories/snapshots")
+        }
+
+        maven {
+            name 'snoatype-releases'
+            url uri("https://oss.sonatype.org/content/repositories/releases")
+        }
+    }
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '1.12'
+}
